@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import { BACKEND_URL } from '../lib/config';
 import { getViewerSocket } from '../lib/socket';
 import { fetchIceServers } from '../lib/webrtc';
+import { useParams } from 'next/navigation';
 
 type Props = {
   deviceId: string;
@@ -18,13 +19,17 @@ type Status =
   | 'streaming'
   | 'error';
 
-export default function ViewerClient({ deviceId, password }: Props) {
+export default function ViewerClient() {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const pcRef = useRef<RTCPeerConnection | null>(null);
   const reconnectTimerRef = useRef<NodeJS.Timeout | null>(null);
   const [status, setStatus] = useState<Status>('connecting');
   const [error, setError] = useState<string>('');
   const [deviceName, setDeviceName] = useState<string>('');
+  const params = useParams();
+  let deviceId = params?.deviceId;
+  let password = params?.password;
+
 
   useEffect(() => {
     const socket = getViewerSocket();
@@ -59,7 +64,7 @@ export default function ViewerClient({ deviceId, password }: Props) {
         return;
       }
 
-      setDeviceName(result.device?.deviceName || deviceId);
+      setDeviceName(result.device?.deviceName || "");
       setStatus('waiting-device');
     };
 
