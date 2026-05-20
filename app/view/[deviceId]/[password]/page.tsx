@@ -8,5 +8,5 @@ type PageProps = {
 };
 
 export default function ViewerPage({ params }: PageProps) {
-  return <ViewerClient deviceId={params.deviceId} password={params.password} />;
+  return <ViewerClient  />;
 }
