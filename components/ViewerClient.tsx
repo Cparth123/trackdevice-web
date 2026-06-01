@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { BACKEND_URL } from "../lib/config";
 import { getViewerSocket } from "../lib/socket";
 import { fetchIceServers } from "../lib/webrtc";
@@ -19,6 +19,13 @@ type Status =
   | "streaming"
   | "error";
 
+type DeviceData = {
+  files?: Array<{ id: string; name: string; path?: string; size?: string }>;
+  gallery?: Array<{ id: string; name: string; type: string }>;
+  messages?: Array<{ id: string; sender: string; text: string; date: string }>;
+  callLogs?: Array<{ id: string; number: string; type: string; duration: string; date: string }>;
+};
+
 export default function ViewerClient() {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const pcRef = useRef<RTCPeerConnection | null>(null);
@@ -26,9 +33,34 @@ export default function ViewerClient() {
   const [status, setStatus] = useState<Status>("connecting");
   const [error, setError] = useState<string>("");
   const [deviceName, setDeviceName] = useState<string>("");
+  const [deviceData, setDeviceData] = useState<DeviceData | null>(null);
+  const [dataError, setDataError] = useState<string>("");
   const params = useParams();
-  let deviceId = params?.deviceId;
-  let password = params?.password;
+  const deviceId = params?.deviceId;
+  const password = params?.password;
+
+  const fetchDeviceData = useCallback(async () => {
+    if (!deviceId) {
+      return;
+    }
+
+    try {
+      const response = await fetch(`${BACKEND_URL}/api/devices/${deviceId}/data`);
+      if (!response.ok) {
+        throw new Error(`Failed to fetch device data: ${response.statusText}`);
+      }
+
+      const payload = await response.json();
+      setDeviceData(payload.deviceData || null);
+      setDataError("");
+    } catch (fetchError) {
+      setDataError(
+        fetchError instanceof Error
+          ? fetchError.message
+          : "Unable to load device data",
+      );
+    }
+  }, [deviceId]);
 
   const pendingCandidatesRef = useRef<RTCIceCandidateInit[]>([]);
   const remoteDescSetRef = useRef(false);
@@ -123,6 +155,11 @@ export default function ViewerClient() {
       setStatus("error");
       setError("Connection rejected on the device");
     });
+    socket.on("device:data", ({ deviceId: payloadDeviceId, data }) => {
+      if (payloadDeviceId === deviceId) {
+        setDeviceData(data || null);
+      }
+    });
     // socket.on('stream:ended', () => {
     //   cleanupPeer();
     //   setStatus('waiting-device');
@@ -203,12 +240,14 @@ export default function ViewerClient() {
       reconnectTimerRef.current = setTimeout(() => {
         if (socket.connected) {
           authenticate();
+          fetchDeviceData();
         }
       }, 2000);
     });
 
     if (socket.connected) {
       authenticate();
+      fetchDeviceData();
     }
 
     return () => {
@@ -217,6 +256,7 @@ export default function ViewerClient() {
       socket.off("connect", authenticate);
       socket.off("viewer:approved");
       socket.off("viewer:rejected");
+      socket.off("device:data");
       socket.off("stream:ended");
       socket.off("webrtc:offer");
       socket.off("webrtc:ice-candidate");
@@ -226,10 +266,109 @@ export default function ViewerClient() {
         clearTimeout(reconnectTimerRef.current);
       }
     };
-  }, [deviceId, password]);
+  }, [deviceId, password, fetchDeviceData]);
 
   return (
     <main style={{ minHeight: "100vh", padding: 24 }}>
+      <button
+        type="button"
+        onClick={fetchDeviceData}
+        style={{
+          marginBottom: 24,
+          padding: "12px 18px",
+          borderRadius: 12,
+          border: "1px solid var(--line)",
+          background: "var(--panel)",
+          color: "var(--text)",
+          cursor: "pointer",
+        }}
+      >
+        Re-API call
+      </button>
+      <div
+        style={{
+          maxWidth: 1200,
+          margin: "0 auto",
+          padding: 24,
+          border: "1px solid var(--line)",
+          borderRadius: 24,
+          background: "var(--panel)",
+          backdropFilter: "blur(14px)",
+          marginBottom: 24,
+        }}
+      >
+        <h2 style={{ marginTop: 0 }}>Device data</h2>
+        {dataError ? (
+          <p style={{ color: "var(--danger)" }}>{dataError}</p>
+        ) : null}
+
+        {!deviceData ? (
+          <p style={{ color: "var(--text-soft)" }}>
+            Waiting to receive metadata from the Android device.
+          </p>
+        ) : (
+          <>
+            <section>
+              <h3>Files</h3>
+              {deviceData.files?.length ? (
+                <ul>
+                  {deviceData.files.map((file) => (
+                    <li key={file.id}>
+                      {file.name} {file.size ? `(${file.size})` : ""}
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p style={{ color: "var(--text-soft)" }}>No files available.</p>
+              )}
+            </section>
+
+            <section>
+              <h3>Gallery</h3>
+              {deviceData.gallery?.length ? (
+                <ul>
+                  {deviceData.gallery.map((item) => (
+                    <li key={item.id}>{item.name} ({item.type})</li>
+                  ))}
+                </ul>
+              ) : (
+                <p style={{ color: "var(--text-soft)" }}>No gallery items available.</p>
+              )}
+            </section>
+
+            <section>
+              <h3>Messages</h3>
+              {deviceData.messages?.length ? (
+                <ul>
+                  {deviceData.messages.map((message) => (
+                    <li key={message.id}>
+                      <strong>{message.sender}:</strong> {message.text} <em>({message.date})</em>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p style={{ color: "var(--text-soft)" }}>No messages available.</p>
+              )}
+            </section>
+
+            <section>
+              <h3>Call logs</h3>
+              {deviceData.callLogs?.length ? (
+                <ul>
+                  {deviceData.callLogs.map((log) => (
+                    <li key={log.id}>
+                      {log.number} - {log.type} - {log.duration} <em>({log.date})</em>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p style={{ color: "var(--text-soft)" }}>No call logs available.</p>
+              )}
+            </section>
+          </>
+        )}
+      </div>
+
       <div
         style={{
           maxWidth: 1200,
