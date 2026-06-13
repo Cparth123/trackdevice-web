@@ -64,6 +64,8 @@ export default function ViewerClient() {
 
   const pendingCandidatesRef = useRef<RTCIceCandidateInit[]>([]);
   const remoteDescSetRef = useRef(false);
+  const onApproved = () => setStatus('receiving-offer');
+  const onRejected = () => { setStatus('error'); setError('Connection rejected on the device'); };
 
   useEffect(() => {
     const socket = getViewerSocket();
@@ -150,11 +152,8 @@ export default function ViewerClient() {
     };
 
     socket.on("connect", authenticate);
-    socket.on("viewer:approved", () => setStatus("receiving-offer"));
-    socket.on("viewer:rejected", () => {
-      setStatus("error");
-      setError("Connection rejected on the device");
-    });
+    socket.on('viewer:approved', onApproved);
+    socket.on('viewer:rejected', onRejected);
     socket.on("device:data", ({ deviceId: payloadDeviceId, data }) => {
       if (payloadDeviceId === deviceId) {
         setDeviceData(data || null);
@@ -228,7 +227,7 @@ export default function ViewerClient() {
       try {
         if (!pcRef.current) return;
         await pcRef.current.addIceCandidate(new RTCIceCandidate(candidate));
-      } catch {}
+      } catch { }
     });
 
     socket.on("disconnect", () => {
@@ -254,8 +253,9 @@ export default function ViewerClient() {
       active = false;
       cleanupPeer();
       socket.off("connect", authenticate);
-      socket.off("viewer:approved");
-      socket.off("viewer:rejected");
+
+      socket.off('viewer:approved', onApproved);
+      socket.off('viewer:rejected', onRejected);
       socket.off("device:data");
       socket.off("stream:ended");
       socket.off("webrtc:offer");
