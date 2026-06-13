@@ -34,3 +34,36 @@ button,
 input {
   font: inherit;
 }
+
+
+* {
+  scrollbar-width: thin;
+}
+
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #1a2a3a;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #2fc587;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #1e8f60;
+}
+
+button:hover {
+  opacity: 0.9;
+  transform: translateY(-1px);
+}
+
+button:active {
+  transform: translateY(1px);
+}
